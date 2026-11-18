@@ -1,0 +1,60 @@
+name: Build Signed Release APK
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          accept-android-sdk-licenses: 'true'
+      - name: Build release APK
+        run: gradle --no-daemon :app:assembleRelease
+      - name: Align, sign and verify APK
+        shell: bash
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          for var in RELEASE_KEYSTORE_BASE64 RELEASE_STORE_PASSWORD RELEASE_KEY_ALIAS RELEASE_KEY_PASSWORD; do
+            if [[ -z "${!var}" ]]; then
+              echo "::error::Missing repository secret: $var"
+              exit 1
+            fi
+          done
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          tools="$sdk/build-tools/35.0.0"
+          signing_dir="$(mktemp -d)"
+          trap 'rm -rf "$signing_dir"' EXIT
+          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$signing_dir/release.jks"
+          unset RELEASE_KEYSTORE_BASE64
+          mkdir -p release
+          "$tools/zipalign" -P 16 -f 4 app/build/outputs/apk/release/app-release-unsigned.apk "$signing_dir/aligned.apk"
+          "$tools/apksigner" sign --ks "$signing_dir/release.jks" --ks-key-alias "$RELEASE_KEY_ALIAS" --ks-pass env:RELEASE_STORE_PASSWORD --key-pass env:RELEASE_KEY_PASSWORD --out release/AI-SMS-release.apk "$signing_dir/aligned.apk"
+          "$tools/apksigner" verify --verbose --print-certs release/AI-SMS-release.apk
+          "$tools/zipalign" -c -P 16 -v 4 release/AI-SMS-release.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AI-SMS-Signed-Release
+          path: release/AI-SMS-release.apk
+          if-no-files-found: error

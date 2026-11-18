@@ -15,3 +15,31 @@ Android 8 이상. 기본 문자 앱을 교체하지 않는, 지정 연락처 전
 API 키는 Android Keystore의 AES-GCM 키를 사용해 암호화합니다. 문자 내용과 이전 문자는 Gemini API로 전송됩니다. 앱은 기본 문자함을 변경하지 않으며 백업을 비활성화합니다. 상대방 동의를 받은 번호만 사용하세요. 오류가 발생하면 ON 아래 간략 상태를 표시합니다. 중복 및 자동응답 루프 방지를 위해 동일한 수신 이벤트를 24시간 중복 처리하지 않으며, 번호별 분당 최대 6건으로 제한합니다. 10분 이상 지연된 작업은 답장하지 않습니다. 백그라운드 실행은 네트워크와 Android JobScheduler에 의존하여 지연될 수 있고 강제 종료 또는 재부팅 후 대기 중이던 작업은 유실될 수 있습니다. 앱을 강제 종료했다면 다시 실행하세요.
 
 Android SMS 권한은 설치 프로그램 및 기기 정책에 의해 제한될 수 있습니다. 권한이 승인되지 않으면 앱을 ON으로 전환하지 않습니다. 회사/학교 등 관리 기기에서 설치나 권한을 허용하지 않을 경우 동작하지 않습니다. Google Play 배포 정책에 별도의 제한이 있습니다.
+
+## 릴리스 서명 APK (GitHub Actions)
+
+기존 디버그 빌드는 유지하며, 별도의 **Build Signed Release APK** 워크플로에서 소유자 본인의 릴리스 키로 APK를 서명합니다. 서명은 개발자 신원 및 APK 무결성을 유지하기 위한 것으로 보안 심사 또는 Play Protect 설치 차단을 해제하는 수단이 아닙니다. 설치가 차단된 경우 검사 결과를 확인하고 공식 이의신청 절차를 이용하세요.
+
+1. 이미 보유한 릴리스 키가 있다면 재사용합니다. 없으면 PC의 Android Studio (Build > Generate Signed Bundle / APK)에서 생성하거나 JDK의 다음 명령을 실행해 생성합니다. 비밀번호는 화면의 프롬프트에서 입력합니다.
+
+   ```powershell
+   keytool -genkeypair -v -keystore auto-message-release.jks -storetype JKS -alias auto-message -keyalg RSA -keysize 3072 -validity 10000
+   ```
+
+2. 저장소 Settings > Secrets and variables > Actions > New repository secret에 아래 4개를 직접 등록합니다. 키 파일은 로컬에서 Base64로 변환합니다. Base64는 암호화가 아니므로 파일 및 문자열을 공개하거나 커밋하지 마세요.
+
+   ```powershell
+   [Convert]::ToBase64String([IO.File]::ReadAllBytes((Resolve-Path .\auto-message-release.jks).Path)) | Set-Clipboard
+   ```
+
+   | Secret | 값 |
+   | --- | --- |
+   | RELEASE_KEYSTORE_BASE64 | 키스토어 Base64 문자열 |
+   | RELEASE_STORE_PASSWORD | 키스토어 비밀번호 |
+   | RELEASE_KEY_ALIAS | 생성 시 지정한 alias (예: auto-message) |
+   | RELEASE_KEY_PASSWORD | 키 비밀번호 |
+
+3. Actions > Build Signed Release APK > Run workflow (main) > 성공한 실행의 Artifacts > AI-SMS-Signed-Release를 내려받습니다. APK 파일 이름은 AI-SMS-release.apk입니다. 서명 및 정렬 검증 실패 시 APK를 게시하지 않습니다.
+
+키스토어와 비밀번호를 오프라인에 백업하고 향후 업데이트에서도 같은 키를 사용합니다. 실제 배포 시 versionCode도 올려야 합니다. 디버그 키와 릴리스 키는 서로 달라 디버그 설치본을 그대로 덮어써 업데이트할 수 없습니다.
+
