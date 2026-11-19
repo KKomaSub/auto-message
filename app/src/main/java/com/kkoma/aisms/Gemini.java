@@ -17,16 +17,16 @@ final class Gemini {
             default: return "Use a natural, balanced and friendly everyday conversational style.";
         }
     }
-    static String ask(String key,JSONArray history,String message,int minimum,int tone)throws Exception{
-        String first=generate(key,history,message,minimum,tone,false);
+    static String ask(String key,JSONArray history,String message,int minimum,int tone,boolean unknownSender)throws Exception{
+        String first=generate(key,history,message,minimum,tone,unknownSender,false);
         if(first.codePointCount(0,first.length())>=minimum)return first;
-        String second=generate(key,history,message,minimum,tone,true);
+        String second=generate(key,history,message,minimum,tone,unknownSender,true);
         if(second.codePointCount(0,second.length())<minimum)throw new Failure("최소 응답 글자 수 미달");
         return second;
     }
-    private static String generate(String key,JSONArray history,String message,int minimum,int tone,boolean retry)throws Exception{
+    private static String generate(String key,JSONArray history,String message,int minimum,int tone,boolean unknownSender,boolean retry)throws Exception{
         JSONObject data=new JSONObject().put("prior_messages",history).put("latest_received",message);
-        JSONObject system=new JSONObject().put("parts",new JSONArray().put(new JSONObject().put("text",INSTRUCTION+" Tone: "+toneInstruction(tone)+" For emergencies, danger, bereavement or serious personal distress, prioritize a compassionate, appropriate response over the selected tone. Do not add a fixed AI auto-reply prefix. Be truthful about being AI if asked. "+(minimum>0?"Your reply must contain at least "+minimum+" Unicode characters, including spaces, without meaningless repetition. ":"")+(retry?"The first draft was too short; write a more complete response.":""))));
+        JSONObject system=new JSONObject().put("parts",new JSONArray().put(new JSONObject().put("text",INSTRUCTION+" Tone: "+toneInstruction(tone)+(unknownSender?" The recipient has not been individually selected; make clear in the body naturally that this is an AI assistant, without impersonating the owner or adding a fixed prefix. Never reveal the owner\'s personal information.":"")+" For emergencies, danger, bereavement or serious personal distress, prioritize a compassionate, appropriate response over the selected tone. Do not add a fixed AI auto-reply prefix. Be truthful about being AI if asked. "+(minimum>0?"Your reply must contain at least "+minimum+" Unicode characters, including spaces, without meaningless repetition. ":"")+(retry?"The first draft was too short; write a more complete response.":""))));
         JSONObject request=new JSONObject().put("systemInstruction",system).put("contents",new JSONArray().put(new JSONObject().put("role","user").put("parts",new JSONArray().put(new JSONObject().put("text",data.toString()))))).put("generationConfig",new JSONObject().put("maxOutputTokens",2048));
         Failure last=null;
         for(String model:MODELS){

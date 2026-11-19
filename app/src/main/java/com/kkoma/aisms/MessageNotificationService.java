@@ -49,14 +49,14 @@ public final class MessageNotificationService extends NotificationListenerServic
         }catch(Exception e){Settings.error(this,"메시지 알림 처리 실패");}
     }
     private boolean eligible(Incoming m,int revision){
-        return active()&&Settings.revision(this)==revision&&Settings.contacts(this).contains(m.number)&&m.time>=Settings.prefs(this).getLong("enabled_since",0)&&System.currentTimeMillis()-m.time<=FRESH&&m.time<=System.currentTimeMillis()+10000L;
+        return active()&&Settings.revision(this)==revision&&Settings.accepts(this,m.number)&&Settings.safeMessage(m.text)&&m.time>=Settings.prefs(this).getLong("enabled_since",0)&&System.currentTimeMillis()-m.time<=FRESH&&m.time<=System.currentTimeMillis()+10000L;
     }
     private void reply(Incoming msg,int revision){
         try{
             if(!eligible(msg,revision))return;
             String key=Settings.key(this);if(key.isEmpty()){Settings.error(this,"API 키를 확인하세요");return;}
             Settings.error(this,"Gemini 응답 생성 중");
-            String answer=Gemini.ask(key,msg.history,msg.text,Settings.minimum(this),Settings.tone(this));
+            String answer=Gemini.ask(key,Settings.safeHistory(msg.history),msg.text,Settings.minimum(this),Settings.tone(this),!Settings.contacts(this).contains(msg.number));
             synchronized(Settings.class){
                 if(!eligible(msg,revision))return;
                 StatusBarNotification[] live=getActiveNotifications(new String[]{msg.key});
@@ -126,7 +126,7 @@ public final class MessageNotificationService extends NotificationListenerServic
         Person sender=last.getSenderPerson();if(self(sender,user))return null;
         String number=number(sender),text=body(last);
         if(number.isEmpty()){if(withHistory)Settings.error(this,"알림 발신 번호 확인 불가");return null;}
-        if(!Settings.contacts(this).contains(number)||text.isEmpty()||text.startsWith("[AI 자동응답]"))return null;
+        if(!Settings.accepts(this,number)||!Settings.safeMessage(text)||text.startsWith("[AI 자동응답]"))return null;
         // Refuse conversations that contain another or unidentifiable incoming participant.
         for(Notification.MessagingStyle.Message m:list)if(!self(m.getSenderPerson(),user)&&!number.equals(number(m.getSenderPerson())))return null;
         Notification.Action chosen=null; RemoteInput input=null;

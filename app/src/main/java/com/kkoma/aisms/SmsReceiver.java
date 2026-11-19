@@ -17,10 +17,10 @@ public final class SmsReceiver extends BroadcastReceiver {
             SmsMessage[] parts=Telephony.Sms.Intents.getMessagesFromIntent(i);
             if(parts==null||parts.length==0||parts[0]==null)return;
             String from=parts[0].getOriginatingAddress(), number=Settings.canonical(c,from);
-            if(number.isEmpty()||!Settings.contacts(c).contains(number)){Settings.error(c,"선택하지 않은 번호의 SMS 수신");return;}
+            if(!Settings.accepts(c,number)){Settings.error(c,"선택하지 않은 번호의 SMS 수신");return;}
             StringBuilder body=new StringBuilder();
             for(SmsMessage p:parts) {if(p==null||!number.equals(Settings.canonical(c,p.getOriginatingAddress())))return; if(p.getMessageBody()!=null)body.append(p.getMessageBody());}
-            String message=body.toString();if(message.trim().isEmpty()||message.startsWith(Settings.PREFIX)||message.startsWith("[AI 자동응답]"))return;
+            String message=body.toString();if(!Settings.safeMessage(message)||message.startsWith(Settings.PREFIX)||message.startsWith("[AI 자동응답]"))return;
             long now=System.currentTimeMillis();int sub=i.getIntExtra("subscription",i.getIntExtra("android.telephony.extra.SUBSCRIPTION_INDEX",-1));
             String hash=fingerprint(number+"\n"+parts[0].getTimestampMillis()+"\n"+message);
             if(!reserve(c,hash,number,now))return;
@@ -44,8 +44,9 @@ public final class SmsReceiver extends BroadcastReceiver {
     static synchronized boolean reserve(Context c,String hash,String sender,long now){
         android.content.SharedPreferences p=c.getSharedPreferences("guard",0);String d="d:"+hash;long old=p.getLong(d,0);if(old>0&&now-old<86400000L)return false;
         String rate="r:"+sender;long start=p.getLong(rate+":start",0);int count=p.getInt(rate+":count",0);if(now-start>=60000L||now<start){start=now;count=0;}if(count>=6)return false;
+        long globalStart=p.getLong("globalStart",0);int globalCount=p.getInt("globalCount",0);if(now-globalStart>=600000L||now<globalStart){globalStart=now;globalCount=0;}if(Settings.allPeople(c)&&globalCount>=30){Settings.error(c,"자동 응답 전체 제한");return false;}
         long burst=p.getLong(rate+":burst",0);int burstCount=p.getInt(rate+":burstCount",0);if(now-burst>=600000L||now<burst){burst=now;burstCount=0;}if(burstCount>=12){Settings.error(c,"자동 응답 반복 제한");return false;}
         android.content.SharedPreferences.Editor e=p.edit();for(java.util.Map.Entry<String,?> item:p.getAll().entrySet())if(item.getKey().startsWith("d:")&&item.getValue() instanceof Long&&now-(Long)item.getValue()>86400000L)e.remove(item.getKey());
-        return e.putLong(d,now).putLong(rate+":start",start).putInt(rate+":count",count+1).putLong(rate+":burst",burst).putInt(rate+":burstCount",burstCount+1).commit();
+        return e.putLong(d,now).putLong(rate+":start",start).putInt(rate+":count",count+1).putLong(rate+":burst",burst).putInt(rate+":burstCount",burstCount+1).putLong("globalStart",globalStart).putInt("globalCount",Math.min(100000,globalCount+1)).commit();
     }
 }

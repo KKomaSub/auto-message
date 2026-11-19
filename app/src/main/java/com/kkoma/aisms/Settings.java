@@ -27,6 +27,31 @@ final class Settings {
     static int revision(Context c) { return prefs(c).getInt("revision",0); }
     static Set<String> contacts(Context c) { return new HashSet<>(prefs(c).getStringSet("contacts", Collections.emptySet())); }
     static int count(Context c) { return Math.max(0,Math.min(100,prefs(c).getInt("count",10))); }
+    static boolean allPeople(Context c){return prefs(c).getBoolean("all_people",false);}
+    static synchronized void setAllPeople(Context c,boolean all){
+        if(all==allPeople(c))return;
+        // Invalidate requests queued for a different recipient policy.
+        prefs(c).edit().putBoolean("all_people",all).putInt("revision",revision(c)+1).putLong("enabled_since",System.currentTimeMillis()).remove("error").commit();
+        c.getSystemService(JobScheduler.class).cancelAll();
+        if(!all&&contacts(c).isEmpty())toggle(c,false);
+    }
+    static boolean accepts(Context c,String number){
+        if(number==null||number.isEmpty())return false;
+        if(contacts(c).contains(number))return true;
+        // Unknown senders must have an ordinary, identifiable phone number.
+        return allPeople(c)&&number.matches("\\+?[0-9]{8,15}");
+    }
+    static boolean safeMessage(String message){
+        if(message==null||message.trim().isEmpty())return false;
+        String s=message.toLowerCase(Locale.ROOT);
+        // Heuristic, not a guarantee: exclude verification and automated advertising notices.
+        return !s.matches("(?s).*(인증\\s*(번호|코드)|일회용\\s*(비밀번호|암호)|보안\\s*코드|verification\\s*code|one[ -]?time\\s*(password|code|pin)|\\botp\\b|\\[광고\\]|무료\\s*수신거부|\\bdo not reply\\b|\\bno[ -]?reply\\b).*");
+    }
+    static org.json.JSONArray safeHistory(org.json.JSONArray input)throws org.json.JSONException{
+        org.json.JSONArray result=new org.json.JSONArray();
+        for(int i=0;i<input.length();i++){org.json.JSONObject row=input.optJSONObject(i);if(row!=null&&safeMessage(row.optString("text")))result.put(row);}
+        return result;
+    }
     static final String[] TONE_LABELS={"코미디","일반","슬픈","진지한"};
     static int tone(Context c){int v=prefs(c).getInt("reply_tone",1);return v>=0&&v<TONE_LABELS.length?v:1;}
     static void setTone(Context c,int tone){if(tone>=0&&tone<TONE_LABELS.length)prefs(c).edit().putInt("reply_tone",tone).apply();}
