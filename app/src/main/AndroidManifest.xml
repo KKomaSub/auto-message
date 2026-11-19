@@ -13,6 +13,7 @@
         <receiver android:name=".SmsReceiver" android:exported="true" android:permission="android.permission.BROADCAST_SMS">
             <intent-filter><action android:name="android.provider.Telephony.SMS_RECEIVED" /></intent-filter>
         </receiver>
+        <receiver android:name=".SmsSentReceiver" android:exported="false" />
         <service android:name=".ReplyJob" android:exported="true" android:permission="android.permission.BIND_JOB_SERVICE" />
     </application>
 </manifest>

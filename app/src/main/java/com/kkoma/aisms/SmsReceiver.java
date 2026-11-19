@@ -16,7 +16,7 @@ public final class SmsReceiver extends BroadcastReceiver {
             SmsMessage[] parts=Telephony.Sms.Intents.getMessagesFromIntent(i);
             if(parts==null||parts.length==0||parts[0]==null)return;
             String from=parts[0].getOriginatingAddress(), number=Settings.canonical(c,from);
-            if(number.isEmpty()||!Settings.contacts(c).contains(number))return;
+            if(number.isEmpty()||!Settings.contacts(c).contains(number)){Settings.error(c,"선택하지 않은 번호의 SMS 수신");return;}
             StringBuilder body=new StringBuilder();
             for(SmsMessage p:parts) {if(p==null||!number.equals(Settings.canonical(c,p.getOriginatingAddress())))return; if(p.getMessageBody()!=null)body.append(p.getMessageBody());}
             String message=body.toString();if(message.trim().isEmpty()||message.startsWith(Settings.PREFIX)||message.startsWith("[AI 자동응답]"))return;
@@ -25,8 +25,17 @@ public final class SmsReceiver extends BroadcastReceiver {
             if(!reserve(c,hash,number,now))return;
             PersistableBundle extras=new PersistableBundle();extras.putString("from",from);extras.putString("number",number);extras.putString("message",message);extras.putLong("received",now);extras.putInt("sub",sub);extras.putInt("revision",Settings.revision(c));
             int id=nextId(c);
-            JobInfo.Builder builder=new JobInfo.Builder(id,new ComponentName(c,ReplyJob.class)).setExtras(extras).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setMinimumLatency(1000);
-            if(c.getSystemService(JobScheduler.class).schedule(builder.build())!=JobScheduler.RESULT_SUCCESS){c.getSharedPreferences("guard",0).edit().remove("d:"+hash).apply();Settings.error(c,"자동 응답 예약 실패");}
+            JobScheduler scheduler=c.getSystemService(JobScheduler.class);
+            ComponentName component=new ComponentName(c,ReplyJob.class);
+            Settings.error(c,"SMS 수신 · 응답 준비 중");
+            int scheduled=JobScheduler.RESULT_FAILURE;
+            if(android.os.Build.VERSION.SDK_INT>=31){
+                try {scheduled=scheduler.schedule(new JobInfo.Builder(id,component).setExtras(extras).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setExpedited(true).build());}
+                catch(IllegalArgumentException ex){android.util.Log.w("AI-SMS","Expedited job unavailable");}
+            }
+            if(scheduled!=JobScheduler.RESULT_SUCCESS)
+                scheduled=scheduler.schedule(new JobInfo.Builder(id,component).setExtras(extras).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setMinimumLatency(1000).build());
+            if(scheduled!=JobScheduler.RESULT_SUCCESS){c.getSharedPreferences("guard",0).edit().remove("d:"+hash).apply();Settings.error(c,"자동 응답 예약 실패");}
         }catch(Exception e){Settings.error(c,"문자 처리 실패");}
     }
     private static String fingerprint(String s)throws Exception {return android.util.Base64.encodeToString(MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8)),android.util.Base64.NO_WRAP|android.util.Base64.URL_SAFE);}
