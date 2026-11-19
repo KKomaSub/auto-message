@@ -27,7 +27,7 @@ public final class ReplyJob extends JobService {
         org.json.JSONArray history=History.load(this,from,message,e.getLong("received"),Settings.count(this));
         if(!allowed(e,run))return;
         Settings.error(this,"Gemini 응답 생성 중");
-        String answer=Gemini.ask(key,history,message,Settings.minimum(this));
+        String answer=Gemini.ask(key,history,message,Settings.minimum(this),Settings.tone(this));
         if(answer.trim().isEmpty()){Settings.error(this,"AI 응답 없음");return;}
         if(!allowed(e,run))return;
         String text=answer.trim();

@@ -27,6 +27,9 @@ final class Settings {
     static int revision(Context c) { return prefs(c).getInt("revision",0); }
     static Set<String> contacts(Context c) { return new HashSet<>(prefs(c).getStringSet("contacts", Collections.emptySet())); }
     static int count(Context c) { return Math.max(0,Math.min(100,prefs(c).getInt("count",10))); }
+    static final String[] TONE_LABELS={"코미디","일반","슬픈","진지한"};
+    static int tone(Context c){int v=prefs(c).getInt("reply_tone",1);return v>=0&&v<TONE_LABELS.length?v:1;}
+    static void setTone(Context c,int tone){if(tone>=0&&tone<TONE_LABELS.length)prefs(c).edit().putInt("reply_tone",tone).apply();}
     static int minimum(Context c){return Math.max(0,Math.min(700,prefs(c).getInt("min_chars",0)));}
     static boolean notificationMode(Context c){return prefs(c).getBoolean("notification_mode",false);}
     static boolean notificationAccess(Context c){return android.os.Build.VERSION.SDK_INT>=30&&c.getSystemService(android.app.NotificationManager.class).isNotificationListenerAccessGranted(new android.content.ComponentName(c,MessageNotificationService.class));}

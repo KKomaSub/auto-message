@@ -56,7 +56,7 @@ public final class MessageNotificationService extends NotificationListenerServic
             if(!eligible(msg,revision))return;
             String key=Settings.key(this);if(key.isEmpty()){Settings.error(this,"API 키를 확인하세요");return;}
             Settings.error(this,"Gemini 응답 생성 중");
-            String answer=Gemini.ask(key,msg.history,msg.text,Settings.minimum(this));
+            String answer=Gemini.ask(key,msg.history,msg.text,Settings.minimum(this),Settings.tone(this));
             synchronized(Settings.class){
                 if(!eligible(msg,revision))return;
                 StatusBarNotification[] live=getActiveNotifications(new String[]{msg.key});
