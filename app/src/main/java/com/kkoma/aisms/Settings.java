@@ -23,7 +23,7 @@ final class Settings {
     private static final String ALIAS = "ai_sms_key_v1";
     static SharedPreferences prefs(Context c) { return c.getSharedPreferences("settings", Context.MODE_PRIVATE); }
     static boolean permissions(Context c) { for (String p : SMS) if (c.checkSelfPermission(p)!=PackageManager.PERMISSION_GRANTED) return false; return true; }
-    static boolean enabled(Context c) { return prefs(c).getBoolean("enabled", false) && (notificationMode(c)?notificationAccess(c):permissions(c)); }
+    static boolean enabled(Context c) { return prefs(c).getBoolean("enabled", false) && permissions(c) && (!notificationMode(c)||notificationAccess(c)); }
     static int revision(Context c) { return prefs(c).getInt("revision",0); }
     static Set<String> contacts(Context c) { return new HashSet<>(prefs(c).getStringSet("contacts", Collections.emptySet())); }
     static int count(Context c) { return Math.max(0,Math.min(100,prefs(c).getInt("count",10))); }

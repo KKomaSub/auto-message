@@ -23,14 +23,20 @@ import java.util.concurrent.*;
 public final class MessageNotificationService extends NotificationListenerService {
     private final ExecutorService executor=Executors.newSingleThreadExecutor();
     private volatile boolean connected;
+    private MmsInboxObserver mmsObserver;
     private static final Set<String> PACKAGES=new HashSet<>(Arrays.asList("com.google.android.apps.messaging","com.samsung.android.messaging","com.android.mms"));
     private static final long FRESH=180000L;
     private static final class Incoming {
         String key,pkg,number,text; long time; Notification.Action action; RemoteInput input; JSONArray history;
     }
-    @Override public void onListenerConnected(){connected=true;if(Settings.enabled(this)&&Settings.notificationMode(this))Settings.error(this,"메시지 알림 대기");}
-    @Override public void onListenerDisconnected(){connected=false;}
-    @Override public void onDestroy(){connected=false;executor.shutdownNow();super.onDestroy();}
+    @Override public void onListenerConnected(){
+        connected=true;
+        if(mmsObserver==null)mmsObserver=new MmsInboxObserver(this);
+        mmsObserver.start();
+        if(Settings.enabled(this)&&Settings.notificationMode(this))Settings.error(this,"SMS · MMS 텍스트 · 메시지 알림 대기");
+    }
+    @Override public void onListenerDisconnected(){connected=false;if(mmsObserver!=null){mmsObserver.stop();mmsObserver=null;}}
+    @Override public void onDestroy(){connected=false;if(mmsObserver!=null){mmsObserver.stop();mmsObserver=null;}executor.shutdownNow();super.onDestroy();}
     private boolean active(){return connected&&Build.VERSION.SDK_INT>=30&&Settings.notificationMode(this)&&Settings.enabled(this)&&Settings.prefs(this).getBoolean("consent_v12",false);}
     private boolean trusted(StatusBarNotification s){
         if(s==null||!PACKAGES.contains(s.getPackageName()))return false;
@@ -43,9 +49,16 @@ public final class MessageNotificationService extends NotificationListenerServic
             Incoming msg=extract(s,true);
             if(msg==null||!eligible(msg,revision))return;
             String hash=SmsReceiver.fingerprint("notification\n"+msg.pkg+"\n"+msg.number+"\n"+msg.time+"\n"+msg.text);
-            if(!SmsReceiver.reserve(this,hash,msg.number,System.currentTimeMillis()))return;
-            Settings.error(this,"메시지 알림 수신 · 응답 준비 중");
-            executor.execute(()->reply(msg,revision));
+            executor.execute(()->{
+                try{
+                    Thread.sleep(1600L);
+                    if(!eligible(msg,revision))return;
+                    if(!SmsReceiver.reserve(this,hash,msg.number,msg.text,System.currentTimeMillis()))return;
+                    Settings.error(this,"메시지 알림 수신 · 응답 준비 중");
+                    reply(msg,revision);
+                }catch(InterruptedException ex){Thread.currentThread().interrupt();}
+                 catch(Exception ex){Settings.error(this,"메시지 알림 처리 실패");}
+            });
         }catch(Exception e){Settings.error(this,"메시지 알림 처리 실패");}
     }
     private boolean eligible(Incoming m,int revision){
