@@ -23,12 +23,19 @@ final class Settings {
     private static final String ALIAS = "ai_sms_key_v1";
     static SharedPreferences prefs(Context c) { return c.getSharedPreferences("settings", Context.MODE_PRIVATE); }
     static boolean permissions(Context c) { for (String p : SMS) if (c.checkSelfPermission(p)!=PackageManager.PERMISSION_GRANTED) return false; return true; }
-    static boolean enabled(Context c) { return prefs(c).getBoolean("enabled", false) && permissions(c); }
+    static boolean enabled(Context c) { return prefs(c).getBoolean("enabled", false) && (notificationMode(c)?notificationAccess(c):permissions(c)); }
     static int revision(Context c) { return prefs(c).getInt("revision",0); }
     static Set<String> contacts(Context c) { return new HashSet<>(prefs(c).getStringSet("contacts", Collections.emptySet())); }
     static int count(Context c) { return Math.max(0,Math.min(100,prefs(c).getInt("count",10))); }
+    static int minimum(Context c){return Math.max(0,Math.min(700,prefs(c).getInt("min_chars",0)));}
+    static boolean notificationMode(Context c){return prefs(c).getBoolean("notification_mode",false);}
+    static boolean notificationAccess(Context c){return android.os.Build.VERSION.SDK_INT>=30&&c.getSystemService(android.app.NotificationManager.class).isNotificationListenerAccessGranted(new android.content.ComponentName(c,MessageNotificationService.class));}
+    static synchronized void changeMode(Context c,boolean mode){
+        toggle(c,false);
+        prefs(c).edit().putBoolean("notification_mode",mode).commit();
+    }
     static synchronized void toggle(Context c, boolean b) {
-        prefs(c).edit().putBoolean("enabled",b).putInt("revision",revision(c)+1).remove("error").commit();
+        prefs(c).edit().putBoolean("enabled",b).putInt("revision",revision(c)+1).putLong("enabled_since",System.currentTimeMillis()).remove("error").commit();
         if(!b) c.getSystemService(JobScheduler.class).cancelAll();
     }
     static String canonical(Context c,String n) {

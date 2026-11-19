@@ -18,7 +18,7 @@ public final class ReplyJob extends JobService {
     });return true;}
     @Override public boolean onStopJob(JobParameters p){AtomicBoolean b=active.remove(p.getJobId());if(b!=null)b.set(false);return false;}
     @Override public void onDestroy(){for(AtomicBoolean b:active.values())b.set(false);executor.shutdownNow();super.onDestroy();}
-    private boolean allowed(PersistableBundle e,AtomicBoolean run){return run.get()&&Settings.enabled(this)&&Settings.revision(this)==e.getInt("revision")&&Settings.contacts(this).contains(e.getString("number",""))&&System.currentTimeMillis()-e.getLong("received")<600000L;}
+    private boolean allowed(PersistableBundle e,AtomicBoolean run){return run.get()&&Settings.enabled(this)&&!Settings.notificationMode(this)&&Settings.revision(this)==e.getInt("revision")&&Settings.contacts(this).contains(e.getString("number",""))&&System.currentTimeMillis()-e.getLong("received")<600000L;}
     private void process(int jobId,PersistableBundle e,AtomicBoolean run)throws Exception{
         if(!allowed(e,run))return;
         String from=e.getString("from",""),message=e.getString("message",""),key=Settings.key(this);
@@ -27,10 +27,10 @@ public final class ReplyJob extends JobService {
         org.json.JSONArray history=History.load(this,from,message,e.getLong("received"),Settings.count(this));
         if(!allowed(e,run))return;
         Settings.error(this,"Gemini 응답 생성 중");
-        String answer=Gemini.ask(key,history,message);
+        String answer=Gemini.ask(key,history,message,Settings.minimum(this));
         if(answer.trim().isEmpty()){Settings.error(this,"AI 응답 없음");return;}
         if(!allowed(e,run))return;
-        String text=answer.trim();if(!text.startsWith(Settings.PREFIX))text=Settings.PREFIX+text;
+        String text=answer.trim();
         SmsManager sms=Build.VERSION.SDK_INT>=31?getSystemService(SmsManager.class):SmsManager.getDefault();int sub=e.getInt("sub",-1);
         if(sub>=0){if(Build.VERSION.SDK_INT>=31)sms=sms.createForSubscriptionId(sub);else sms=SmsManager.getSmsManagerForSubscriptionId(sub);}
         ArrayList<String> parts=sms.divideMessage(text);

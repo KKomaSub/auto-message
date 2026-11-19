@@ -12,6 +12,7 @@ import java.security.MessageDigest;
 public final class SmsReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context c,Intent i) {
         if(!Telephony.Sms.Intents.SMS_RECEIVED_ACTION.equals(i.getAction()) || !Settings.enabled(c))return;
+        if(Settings.notificationMode(c))return;
         try {
             SmsMessage[] parts=Telephony.Sms.Intents.getMessagesFromIntent(i);
             if(parts==null||parts.length==0||parts[0]==null)return;
@@ -38,12 +39,13 @@ public final class SmsReceiver extends BroadcastReceiver {
             if(scheduled!=JobScheduler.RESULT_SUCCESS){c.getSharedPreferences("guard",0).edit().remove("d:"+hash).apply();Settings.error(c,"자동 응답 예약 실패");}
         }catch(Exception e){Settings.error(c,"문자 처리 실패");}
     }
-    private static String fingerprint(String s)throws Exception {return android.util.Base64.encodeToString(MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8)),android.util.Base64.NO_WRAP|android.util.Base64.URL_SAFE);}
+    static String fingerprint(String s)throws Exception {return android.util.Base64.encodeToString(MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8)),android.util.Base64.NO_WRAP|android.util.Base64.URL_SAFE);}
     private static synchronized int nextId(Context c){android.content.SharedPreferences p=c.getSharedPreferences("guard",0);int n=p.getInt("next",1000);p.edit().putInt("next",n==Integer.MAX_VALUE?1000:n+1).commit();return n;}
-    private static synchronized boolean reserve(Context c,String hash,String sender,long now){
+    static synchronized boolean reserve(Context c,String hash,String sender,long now){
         android.content.SharedPreferences p=c.getSharedPreferences("guard",0);String d="d:"+hash;long old=p.getLong(d,0);if(old>0&&now-old<86400000L)return false;
         String rate="r:"+sender;long start=p.getLong(rate+":start",0);int count=p.getInt(rate+":count",0);if(now-start>=60000L||now<start){start=now;count=0;}if(count>=6)return false;
+        long burst=p.getLong(rate+":burst",0);int burstCount=p.getInt(rate+":burstCount",0);if(now-burst>=600000L||now<burst){burst=now;burstCount=0;}if(burstCount>=12){Settings.error(c,"자동 응답 반복 제한");return false;}
         android.content.SharedPreferences.Editor e=p.edit();for(java.util.Map.Entry<String,?> item:p.getAll().entrySet())if(item.getKey().startsWith("d:")&&item.getValue() instanceof Long&&now-(Long)item.getValue()>86400000L)e.remove(item.getKey());
-        return e.putLong(d,now).putLong(rate+":start",start).putInt(rate+":count",count+1).commit();
+        return e.putLong(d,now).putLong(rate+":start",start).putInt(rate+":count",count+1).putLong(rate+":burst",burst).putInt(rate+":burstCount",burstCount+1).commit();
     }
 }
